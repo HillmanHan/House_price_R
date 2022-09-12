@@ -1,0 +1,60 @@
+---
+title: "Main_analysis"
+author: "Hillman Han"
+date: '2022-09-12'
+output: html_document
+---
+```{r}
+#Load data and packages
+library(readxl)
+library(ggplot2)
+library(dplyr)
+library(corrplot)
+
+df <- read.csv("train.csv")
+df <- df[, 2: ncol(df)] #getting rid of id column
+      
+```
+
+## Explore the dataset
+Our dependent variable is SalePrice
+```{r}
+summary(df$SalePrice)
+
+medianSP <- median(df$SalePrice)
+ggplot(df, aes(x = SalePrice)) +
+      geom_density() +
+      scale_x_continuous(name = "Sales Price", breaks = seq(0,max(df$SalePrice), 1e+5)) +
+      geom_vline(xintercept = medianSP, size = 1, color = "red") +
+      geom_text(aes(x = medianSP + 50000, label = paste0("median\n", medianSP), y = 7e-06))
+#This shows that a large proportion of sales price is centered around the median 163000
+
+```
+Finding numeric variables and categorical variables
+```{r}
+numV <- which(sapply(df, is.numeric)) #saving the indices of numeric columns
+length(numV) #There are 37 variables that are numeric
+numVnames <- names(numV)
+```
+
+
+## Explore whether the column has NA
+```{r}
+colSums(is.na(df)) #how many NAs in a column
+NAcolumns <- names(which(colSums(is.na(df)) > 0 )) #which columns have NAs
+print(NAcolumns)
+cat('There are', length(names(which(colSums(is.na(df)) > 0 ))), 'columns with NAs')
+```
+This shows that 19 columns contain NA. The next step is to read the description and assign appropriate values to NAs if needed. 
+
+## LotFrontage
+First explore the data using ggplot
+```{r}
+
+```
+
+
+
+
+
+
