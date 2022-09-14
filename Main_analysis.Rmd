@@ -18,6 +18,7 @@ df <- df[, 2: ncol(df)] #getting rid of id column
 
 ## Explore the dataset
 Our dependent variable is SalePrice
+Balabla
 ```{r}
 summary(df$SalePrice)
 
