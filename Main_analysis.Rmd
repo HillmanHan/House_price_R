@@ -18,8 +18,6 @@ df <- df[, 2: ncol(df)] #getting rid of id column
 
 ## Explore the dataset
 Our dependent variable is SalePrice
-Balabla
-hillman hillman
 ```{r}
 summary(df$SalePrice)
 
@@ -45,9 +43,11 @@ numVnames <- names(numV)
 colSums(is.na(df)) #how many NAs in a column
 NAcolumns <- names(which(colSums(is.na(df)) > 0 )) #which columns have NAs
 print(NAcolumns)
-cat('There are', length(names(which(colSums(is.na(df)) > 0 ))), 'columns with NAs')
+cat('There are', length(names(which(colSums(is.na(df)) > 0 ))), 'columns with NAs. ')
+cat('In these columns,', names(which(colSums(is.na(df)) > 0.8 * nrow(df))), ', more than 80% of total observations are NAs')
+
 ```
-This shows that 19 columns contain NA. The next step is to read the description and assign appropriate values to NAs if needed. 
+This shows that 19 columns contain missing values. 4 of these 19 columns  have more than 1168 missing values (80% of total obeservations). These 4 columns will be excluded from the list of independent variables of future models. The next step is to understand the data description and assign appropriate values to missing values for each column if needed, namely, LotFrontage, MasVnrType, MasVnrArea, BsmtQual, BsmtCond, BsmtExposure, BsmtFinType1, BsmtFinType2, Electrical FireplaceQu, GarageType, GarageYrBlt, GarageFinish, GarageQual, GarageCond, PoolQC.
 
 ## LotFrontage
 First explore the data using ggplot
