@@ -35,6 +35,10 @@ Finding numeric variables and categorical variables
 numV <- which(sapply(df, is.numeric)) #saving the indices of numeric columns
 length(numV) #There are 37 variables that are numeric
 numVnames <- names(numV)
+charV <- which(sapply(df, is.character))
+length(charV) #There are 43 variables that are categorical
+charVnames <- names(charV)
+charVnames
 ```
 
 
@@ -49,10 +53,49 @@ cat('In these columns,', names(which(colSums(is.na(df)) > 0.8 * nrow(df))), ', m
 ```
 This shows that 19 columns contain missing values. 4 of these 19 columns  have more than 1168 missing values (80% of total obeservations). These 4 columns will be excluded from the list of independent variables of future models. The next step is to understand the data description and assign appropriate values to missing values for each column if needed, namely, LotFrontage, MasVnrType, MasVnrArea, BsmtQual, BsmtCond, BsmtExposure, BsmtFinType1, BsmtFinType2, Electrical FireplaceQu, GarageType, GarageYrBlt, GarageFinish, GarageQual, GarageCond, PoolQC.
 
-## LotFrontage
-First explore the data using ggplot
-```{r}
 
+## LotFrontage
+Description: Linear feet of street connected to property.
+Among all variables, it would make more sense if we use neighborhood as our predictor for the missing values in LotFrontage. The spread of LotFrontage for each neighborhood is relatively small. I am taking the median of LotFrontage for each neighborhood here.
+```{r}
+ggplot(df, aes(x = LotFrontage)) +
+      geom_histogram() +
+      facet_wrap(~Neighborhood)
+
+df %>% 
+      group_by(Neighborhood) %>%
+      summarize(MedianLot = as.integer(median(LotFrontage, na.rm = TRUE))) %>%
+ggplot(aes(x = as.factor(Neighborhood), y = MedianLot, fill = 'red')) +
+      geom_col() +
+      geom_text(aes(label = MedianLot), nudge_y = 0.5, vjust = -0.2, size = 3) +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+      ggtitle("median LotFrontage for each neighborhood") +
+      xlab("Neighborhood") +
+      theme(legend.position = 'none')
+
+for (i in 1:nrow(df)){
+        if(is.na(df$LotFrontage[i])){
+               df$LotFrontage[i] <- as.integer(median(df$LotFrontage[df$Neighborhood == df$Neighborhood[i]], na.rm=TRUE)) 
+        }
+} #replace NAs in LotFrontage with their respective median from neiborhood group
+
+#sanity check
+sum(is.na(df$LotFrontage))
+```
+
+## MasVnrType & MasVnrArea
+Description: Masonry veneer type; Masonry veneer area in square feet
+Since for a house to have Masonry veneer area, it has to have a masonry veneer type. I need to check if the NA inputs in MasVnrType have inputs in MasVnr. If both have NAs, I will input none and 0 in the respective column.
+```{r}
+#See which rows have either NAs in MasVnrType or MasVnrArea
+df[is.na(df$MasVnrType) | is.na(df$MasVnrArea), c('MasVnrType', 'MasVnrArea')] 
+
+df$MasVnrType[is.na(df$MasVnrType)] <- 'none'
+df$MasVnrArea[is.na(df$MasVnrArea)] <- 0
+
+#Sanity Check
+sum(is.na(df$MasVnrType))
+sum(is.na(df$MasVnrArea))
 ```
 
 
