@@ -97,6 +97,54 @@ df$MasVnrArea[is.na(df$MasVnrArea)] <- 0
 sum(is.na(df$MasVnrType))
 sum(is.na(df$MasVnrArea))
 ```
+## Bsmt_
+Description:
+BsmtQual: Evaluates the height of the basement
+BsmtCond: Evaluates the general condition of the basement
+BsmtExposure: Refers to walkout or garden level walls
+BsmtFinType1: Rating of basement finished area
+BsmtFinType2: Rating of basement finished area (if multiple types)
+The logic to process basement related variables is the same as Masonry.
+The description file tells that NA means no basement, but to make sure there is no missing input, I am checking there are rows where some of the five variables have inputs while others not. This will mean that NA is missing inputs instead of no basement.
+```{r}
+df[is.na(df$BsmtQual) | is.na(df$BsmtCond) | is.na(df$BsmtExposure) | is.na(df$BsmtFinType1) | is.na(df$BsmtFinType2), c('BsmtQual', 'BsmtCond', 'BsmtExposure', 'BsmtFinType1','BsmtFinType2')] 
+#Two rows have NA for one of the five variables, while others have NAs for all five variables.
+#Two rows are row 333 and row 949
+ggplot(df, aes(x = BsmtFinSF2)) +
+      geom_histogram() +
+      facet_wrap(~BsmtFinType2) +
+      ylim(0,5)
+#There can be some correlation between BsmtFinSF2 and BsmtFinType2
+df %>% 
+      group_by(BsmtFinType2) %>%
+      summarise(meanFinSF2 = mean(BsmtFinSF2))
+df[333,] # has BsmtFinSF2 input 479, since I do not have a large sample for BsmtFinSF2, I can only take a bold step to match the input the closest mean, that is Rec
+df[333,'BsmtFinType2'] <- 'Rec'
+
+#For row 949, the NA is in BsmtExposure, I will replace it with the most common BsmtExposure
+ggplot(df, aes(x = BsmtExposure)) +
+      geom_bar()
+df[949, 'BsmtExposure'] <- 'No'
+
+#the other NAs will be replaced with 'NoBase'
+df$BsmtQual[is.na(df$BsmtQual)] <- 'NoBase'
+df$BsmtCond[is.na(df$BsmtCond)] <- 'NoBase'
+df$BsmtExposure[is.na(df$BsmtExposure)] <- 'NoBase'
+df$BsmtFinType1[is.na(df$BsmtFinType1)] <- 'NoBase'
+df$BsmtFinType2[is.na(df$BsmtFinType2)] <- 'NoBase'
+
+#sanity check
+sum(is.na(df$BsmtQual))
+sum(is.na(df$BsmtCond))
+sum(is.na(df$BsmtExposure))
+sum(is.na(df$BsmtFinType1))
+sum(is.na(df$BsmtFinType2))
+
+```
+
+
+
+
 
 
 
