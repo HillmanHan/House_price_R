@@ -143,6 +143,66 @@ sum(is.na(df$BsmtFinType2))
 ```
 
 
+## Garage_
+Description:
+GarageType: Garage location
+GarageYrBlt: Year garage was built
+GarageFinish: Interior finish of the garage
+GarageQual: Garage quality
+GarageCond: Garage condition
+The logic to process basement related variables is the same as Masonry and Basement. Since the other two garage related variables, namely GarageCars and GarageArea, do not have missing inputs, I will cross check with these two columns first. 
+```{r}
+df[is.na(df$GarageType) | is.na(df$GarageYrBlt) | is.na(df$GarageFinish) | is.na(df$GarageQual) | is.na(df$GarageCond), c('GarageType', 'GarageYrBlt', 'GarageFinish', 'GarageQual','GarageCond', 'GarageCars', 'GarageArea')] 
+#It turns out all NA here match GarageCars = 0 and GarageArea = 0, meaning No Garage in the house. Therefore, I move on to replace all NAs with 'NoGar' to clarify the category.
+
+df$GarageType[is.na(df$GarageType)] <- 'NoGar'
+df$GarageYrBlt[is.na(df$GarageYrBlt)] <- 'NoGar'
+df$GarageFinish[is.na(df$GarageFinish)] <- 'NoGar'
+df$GarageQual[is.na(df$GarageQual)] <- 'NoGar'
+df$GarageCond[is.na(df$GarageCond)] <- 'NoGar'
+
+#Sanity Check
+sum(is.na(df$GarageType))
+sum(is.na(df$GarageYrBlt))
+sum(is.na(df$GarageFinish))
+sum(is.na(df$GarageQual))
+sum(is.na(df$GarageCond))
+
+```
+
+## Electrical
+Description: Electrical system
+There is only 1 NA in this column, I will use the most frequent of all types.
+```{r}
+ggplot(df, aes(x = Electrical)) +
+      geom_bar()
+
+df$Electrical[is.na(df$Electrical)] <- 'SBrkr'
+sum(is.na(df$Electrical))
+```
+
+## FireplaceQu
+Description: Fireplace quality
+My assumption is the NAs in this column mean that there is no Fireplace in the house. It would be then be reasonable that Fireplaces = 0; otherwise, if the Fireplaces >0, the NAs in DireplaceQu are actually missing inputs. I will use the most common type to replace the NA.
+```{r}
+sum((is.na(df$FireplaceQu)) & (df$Fireplaces == 0)) == sum(is.na(df$FireplaceQu))
+#All NAs in FireplaceQu mean there is no fireplace in the house.
+
+df$FireplaceQu[is.na(df$FireplaceQu)] <- 'NoFire'
+sum(is.na(df$FireplaceQu))
+```
+
+## Reassemble dataframe
+```{r}
+train <- df %>%
+      select(-Alley, -PoolQC, -Fence, -MiscFeature)
+sum(is.na(train)) #clean
+```
+
+
+
+
+
 
 
 
