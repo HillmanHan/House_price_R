@@ -8,8 +8,10 @@ output: html_document
 #Load data and packages
 library(readxl)
 library(ggplot2)
+library(ggcorrplot)
 library(dplyr)
 library(corrplot)
+
 
 df <- read.csv("train.csv")
 df <- df[, 2: ncol(df)] #getting rid of id column
@@ -29,16 +31,6 @@ ggplot(df, aes(x = SalePrice)) +
       geom_text(aes(x = medianSP + 50000, label = paste0("median\n", medianSP), y = 7e-06))
 #This shows that a large proportion of sales price is centered around the median 163000
 
-```
-Finding numeric variables and categorical variables
-```{r}
-numV <- which(sapply(df, is.numeric)) #saving the indices of numeric columns
-length(numV) #There are 37 variables that are numeric
-numVnames <- names(numV)
-charV <- which(sapply(df, is.character))
-length(charV) #There are 43 variables that are categorical
-charVnames <- names(charV)
-charVnames
 ```
 
 
@@ -192,12 +184,66 @@ df$FireplaceQu[is.na(df$FireplaceQu)] <- 'NoFire'
 sum(is.na(df$FireplaceQu))
 ```
 
-## Reassemble dataframe
+## Reassemble the cleaned dataframe
 ```{r}
 train <- df %>%
       select(-Alley, -PoolQC, -Fence, -MiscFeature)
 sum(is.na(train)) #clean
 ```
+
+# Exploration of variables
+## Numeric vs Categorical variables
+```{r}
+#identifying numeric and categorical variables
+numV <- which(sapply(train, is.numeric)) #saving the indices of numeric columns
+length(numV) #There are 37 variables that are numeric
+numVnames <- names(numV)
+charV <- which(sapply(train, is.character))
+length(charV) #There are 43 variables that are categorical
+charVnames <- names(charV)
+charVnames
+
+#change categorical variables into factors
+for (i in 1:length(charVnames)) {
+      train[,charV[i]] = as.factor(train[,charV[i]])
+}
+
+#sanity check
+for (i in 1:length(charVnames)) {
+      print(levels(train[,charV[i]]))
+}
+
+#turning some numeric variables into factors
+#1. Year Sold
+train[,"YrSold"] <- as.factor(train[,"YrSold"])
+#2. Month Sold
+train[,"MoSold"] <- as.factor(train[,"MoSold"])
+#3. MSSubClass
+train[,"MSSubClass"] <- as.factor(train[,"MSSubClass"])
+```
+
+
+## Correlation Exploration
+``` {r}
+#correlations between numerica variables
+corNumV <- cor(train[,numV],use="pairwise.complete.obs")
+corNumV_sort <- as.matrix(sort(corNumV[,'SalePrice'],decreasing = TRUE)) #sort based on the correlation of variable with SalePrice
+CorNumV_high <- names(which(apply(corNumV_sort, 1, function(x) abs(x)>0.5))) #the apply function cannot be applied to a vector, so transform corNum_sort to matrix is necessary
+corNumV1 = corNumV[CorNumV_high,CorNumV_high]
+corrplot.mixed(corNumV1, tl.col="black", tl.pos = "lt", number.cex = 0.7)
+
+
+#try correlations with mixed data type
+
+```
+some analysis
+
+```{r}
+#and more data exploration on numeric variables
+```
+
+
+
 
 
 
