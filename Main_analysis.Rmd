@@ -8,8 +8,10 @@ output: html_document
 #Load data and packages
 library(readxl)
 library(ggplot2)
+library(ggcorrplot)
 library(dplyr)
 library(corrplot)
+
 
 df <- read.csv("train.csv")
 df <- df[, 2: ncol(df)] #getting rid of id column
@@ -18,7 +20,6 @@ df <- df[, 2: ncol(df)] #getting rid of id column
 
 ## Explore the dataset
 Our dependent variable is SalePrice
-Balabla
 ```{r}
 summary(df$SalePrice)
 
@@ -31,12 +32,6 @@ ggplot(df, aes(x = SalePrice)) +
 #This shows that a large proportion of sales price is centered around the median 163000
 
 ```
-Finding numeric variables and categorical variables
-```{r}
-numV <- which(sapply(df, is.numeric)) #saving the indices of numeric columns
-length(numV) #There are 37 variables that are numeric
-numVnames <- names(numV)
-```
 
 
 ## Explore whether the column has NA
@@ -44,15 +39,218 @@ numVnames <- names(numV)
 colSums(is.na(df)) #how many NAs in a column
 NAcolumns <- names(which(colSums(is.na(df)) > 0 )) #which columns have NAs
 print(NAcolumns)
-cat('There are', length(names(which(colSums(is.na(df)) > 0 ))), 'columns with NAs')
+cat('There are', length(names(which(colSums(is.na(df)) > 0 ))), 'columns with NAs. ')
+cat('In these columns,', names(which(colSums(is.na(df)) > 0.8 * nrow(df))), ', more than 80% of total observations are NAs')
+
 ```
-This shows that 19 columns contain NA. The next step is to read the description and assign appropriate values to NAs if needed. 
+This shows that 19 columns contain missing values. 4 of these 19 columns  have more than 1168 missing values (80% of total obeservations). These 4 columns will be excluded from the list of independent variables of future models. The next step is to understand the data description and assign appropriate values to missing values for each column if needed, namely, LotFrontage, MasVnrType, MasVnrArea, BsmtQual, BsmtCond, BsmtExposure, BsmtFinType1, BsmtFinType2, Electrical FireplaceQu, GarageType, GarageYrBlt, GarageFinish, GarageQual, GarageCond, PoolQC.
+
 
 ## LotFrontage
-First explore the data using ggplot
+Description: Linear feet of street connected to property.
+Among all variables, it would make more sense if we use neighborhood as our predictor for the missing values in LotFrontage. The spread of LotFrontage for each neighborhood is relatively small. I am taking the median of LotFrontage for each neighborhood here.
 ```{r}
+ggplot(df, aes(x = LotFrontage)) +
+      geom_histogram() +
+      facet_wrap(~Neighborhood)
+
+df %>% 
+      group_by(Neighborhood) %>%
+      summarize(MedianLot = as.integer(median(LotFrontage, na.rm = TRUE))) %>%
+ggplot(aes(x = as.factor(Neighborhood), y = MedianLot, fill = 'red')) +
+      geom_col() +
+      geom_text(aes(label = MedianLot), nudge_y = 0.5, vjust = -0.2, size = 3) +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+      ggtitle("median LotFrontage for each neighborhood") +
+      xlab("Neighborhood") +
+      theme(legend.position = 'none')
+
+for (i in 1:nrow(df)){
+        if(is.na(df$LotFrontage[i])){
+               df$LotFrontage[i] <- as.integer(median(df$LotFrontage[df$Neighborhood == df$Neighborhood[i]], na.rm=TRUE)) 
+        }
+} #replace NAs in LotFrontage with their respective median from neiborhood group
+
+#sanity check
+sum(is.na(df$LotFrontage))
+```
+
+## MasVnrType & MasVnrArea
+Description: Masonry veneer type; Masonry veneer area in square feet
+Since for a house to have Masonry veneer area, it has to have a masonry veneer type. I need to check if the NA inputs in MasVnrType have inputs in MasVnr. If both have NAs, I will input none and 0 in the respective column.
+```{r}
+#See which rows have either NAs in MasVnrType or MasVnrArea
+df[is.na(df$MasVnrType) | is.na(df$MasVnrArea), c('MasVnrType', 'MasVnrArea')] 
+
+df$MasVnrType[is.na(df$MasVnrType)] <- 'none'
+df$MasVnrArea[is.na(df$MasVnrArea)] <- 0
+
+#Sanity Check
+sum(is.na(df$MasVnrType))
+sum(is.na(df$MasVnrArea))
+```
+## Bsmt_
+Description:
+BsmtQual: Evaluates the height of the basement
+BsmtCond: Evaluates the general condition of the basement
+BsmtExposure: Refers to walkout or garden level walls
+BsmtFinType1: Rating of basement finished area
+BsmtFinType2: Rating of basement finished area (if multiple types)
+The logic to process basement related variables is the same as Masonry.
+The description file tells that NA means no basement, but to make sure there is no missing input, I am checking there are rows where some of the five variables have inputs while others not. This will mean that NA is missing inputs instead of no basement.
+```{r}
+df[is.na(df$BsmtQual) | is.na(df$BsmtCond) | is.na(df$BsmtExposure) | is.na(df$BsmtFinType1) | is.na(df$BsmtFinType2), c('BsmtQual', 'BsmtCond', 'BsmtExposure', 'BsmtFinType1','BsmtFinType2')] 
+#Two rows have NA for one of the five variables, while others have NAs for all five variables.
+#Two rows are row 333 and row 949
+ggplot(df, aes(x = BsmtFinSF2)) +
+      geom_histogram() +
+      facet_wrap(~BsmtFinType2) +
+      ylim(0,5)
+#There can be some correlation between BsmtFinSF2 and BsmtFinType2
+df %>% 
+      group_by(BsmtFinType2) %>%
+      summarise(meanFinSF2 = mean(BsmtFinSF2))
+df[333,] # has BsmtFinSF2 input 479, since I do not have a large sample for BsmtFinSF2, I can only take a bold step to match the input the closest mean, that is Rec
+df[333,'BsmtFinType2'] <- 'Rec'
+
+#For row 949, the NA is in BsmtExposure, I will replace it with the most common BsmtExposure
+ggplot(df, aes(x = BsmtExposure)) +
+      geom_bar()
+df[949, 'BsmtExposure'] <- 'No'
+
+#the other NAs will be replaced with 'NoBase'
+df$BsmtQual[is.na(df$BsmtQual)] <- 'NoBase'
+df$BsmtCond[is.na(df$BsmtCond)] <- 'NoBase'
+df$BsmtExposure[is.na(df$BsmtExposure)] <- 'NoBase'
+df$BsmtFinType1[is.na(df$BsmtFinType1)] <- 'NoBase'
+df$BsmtFinType2[is.na(df$BsmtFinType2)] <- 'NoBase'
+
+#sanity check
+sum(is.na(df$BsmtQual))
+sum(is.na(df$BsmtCond))
+sum(is.na(df$BsmtExposure))
+sum(is.na(df$BsmtFinType1))
+sum(is.na(df$BsmtFinType2))
 
 ```
+
+
+## Garage_
+Description:
+GarageType: Garage location
+GarageYrBlt: Year garage was built
+GarageFinish: Interior finish of the garage
+GarageQual: Garage quality
+GarageCond: Garage condition
+The logic to process basement related variables is the same as Masonry and Basement. Since the other two garage related variables, namely GarageCars and GarageArea, do not have missing inputs, I will cross check with these two columns first. 
+```{r}
+df[is.na(df$GarageType) | is.na(df$GarageYrBlt) | is.na(df$GarageFinish) | is.na(df$GarageQual) | is.na(df$GarageCond), c('GarageType', 'GarageYrBlt', 'GarageFinish', 'GarageQual','GarageCond', 'GarageCars', 'GarageArea')] 
+#It turns out all NA here match GarageCars = 0 and GarageArea = 0, meaning No Garage in the house. Therefore, I move on to replace all NAs with 'NoGar' to clarify the category.
+
+df$GarageType[is.na(df$GarageType)] <- 'NoGar'
+df$GarageYrBlt[is.na(df$GarageYrBlt)] <- 'NoGar'
+df$GarageFinish[is.na(df$GarageFinish)] <- 'NoGar'
+df$GarageQual[is.na(df$GarageQual)] <- 'NoGar'
+df$GarageCond[is.na(df$GarageCond)] <- 'NoGar'
+
+#Sanity Check
+sum(is.na(df$GarageType))
+sum(is.na(df$GarageYrBlt))
+sum(is.na(df$GarageFinish))
+sum(is.na(df$GarageQual))
+sum(is.na(df$GarageCond))
+
+```
+
+## Electrical
+Description: Electrical system
+There is only 1 NA in this column, I will use the most frequent of all types.
+```{r}
+ggplot(df, aes(x = Electrical)) +
+      geom_bar()
+
+df$Electrical[is.na(df$Electrical)] <- 'SBrkr'
+sum(is.na(df$Electrical))
+```
+
+## FireplaceQu
+Description: Fireplace quality
+My assumption is the NAs in this column mean that there is no Fireplace in the house. It would be then be reasonable that Fireplaces = 0; otherwise, if the Fireplaces >0, the NAs in DireplaceQu are actually missing inputs. I will use the most common type to replace the NA.
+```{r}
+sum((is.na(df$FireplaceQu)) & (df$Fireplaces == 0)) == sum(is.na(df$FireplaceQu))
+#All NAs in FireplaceQu mean there is no fireplace in the house.
+
+df$FireplaceQu[is.na(df$FireplaceQu)] <- 'NoFire'
+sum(is.na(df$FireplaceQu))
+```
+
+## Reassemble the cleaned dataframe
+```{r}
+train <- df %>%
+      select(-Alley, -PoolQC, -Fence, -MiscFeature)
+sum(is.na(train)) #clean
+```
+
+# Exploration of variables
+## Numeric vs Categorical variables
+```{r}
+#identifying numeric and categorical variables
+numV <- which(sapply(train, is.numeric)) #saving the indices of numeric columns
+length(numV) #There are 37 variables that are numeric
+numVnames <- names(numV)
+charV <- which(sapply(train, is.character))
+length(charV) #There are 43 variables that are categorical
+charVnames <- names(charV)
+charVnames
+
+#change categorical variables into factors
+for (i in 1:length(charVnames)) {
+      train[,charV[i]] = as.factor(train[,charV[i]])
+}
+
+#sanity check
+for (i in 1:length(charVnames)) {
+      print(levels(train[,charV[i]]))
+}
+
+#turning some numeric variables into factors
+#1. Year Sold
+train[,"YrSold"] <- as.factor(train[,"YrSold"])
+#2. Month Sold
+train[,"MoSold"] <- as.factor(train[,"MoSold"])
+#3. MSSubClass
+train[,"MSSubClass"] <- as.factor(train[,"MSSubClass"])
+```
+
+
+## Correlation Exploration
+``` {r}
+#correlations between numerica variables
+corNumV <- cor(train[,numV],use="pairwise.complete.obs")
+corNumV_sort <- as.matrix(sort(corNumV[,'SalePrice'],decreasing = TRUE)) #sort based on the correlation of variable with SalePrice
+CorNumV_high <- names(which(apply(corNumV_sort, 1, function(x) abs(x)>0.5))) #the apply function cannot be applied to a vector, so transform corNum_sort to matrix is necessary
+corNumV1 = corNumV[CorNumV_high,CorNumV_high]
+corrplot.mixed(corNumV1, tl.col="black", tl.pos = "lt", number.cex = 0.7)
+
+
+#try correlations with mixed data type
+
+```
+some analysis
+
+```{r}
+#and more data exploration on numeric variables
+```
+
+
+
+
+
+
+
+
+
+
 
 
 
