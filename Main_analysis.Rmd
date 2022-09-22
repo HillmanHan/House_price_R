@@ -8,7 +8,6 @@ output: html_document
 #Load data and packages
 library(readxl)
 library(ggplot2)
-library(ggcorrplot)
 library(dplyr)
 library(corrplot)
 
@@ -229,19 +228,40 @@ train[,"MSSubClass"] <- as.factor(train[,"MSSubClass"])
 corNumV <- cor(train[,numV],use="pairwise.complete.obs")
 corNumV_sort <- as.matrix(sort(corNumV[,'SalePrice'],decreasing = TRUE)) #sort based on the correlation of variable with SalePrice
 CorNumV_high <- names(which(apply(corNumV_sort, 1, function(x) abs(x)>0.5))) #the apply function cannot be applied to a vector, so transform corNum_sort to matrix is necessary
-corNumV1 = corNumV[CorNumV_high,CorNumV_high]
+corNumV1 <- corNumV[CorNumV_high,CorNumV_high]
 corrplot.mixed(corNumV1, tl.col="black", tl.pos = "lt", number.cex = 0.7)
 
 
 #try correlations with mixed data type
-
+AllMatrix <- model.matrix(~.-1, data=train) #This turns all categorical variables into dummies
+corAll <- cor(AllMatrix, use = "pairwise.complete.obs")
+corAll_sort <- as.matrix(sort(corAll[,'SalePrice'], decreasing = TRUE))
+corAll_high <- names(which(apply(corAll_sort, 1, function(x) abs(x)>0.5)))
+corAll1 <- corAll[corAll_high,corAll_high]
+corrplot.mixed(corAll1, tl.col="black", tl.pos = "lt", number.cex = 0.7)
 ```
 some analysis
 
 ```{r}
-#and more data exploration on numeric variables
+#more data exploration
 ```
 
+
+## dropping highly correlated variables (above 0.7)
+```{r}
+dropvar <- c('GarageArea', 'X1stFlrSF','TotRmsAbvGrd')
+train <- train[,!(names(train) %in% dropvar)]
+```
+Future Improvement: I can make the drop process more automated by writing a function: identifying high correlations and drop the variable that has lower correlation with the SalePrice
+
+
+### test station
+```{r}
+#use of model.matrix to create dummies
+testdf <- data.frame(x1 = as.factor(c("a","a","b","c","d")), x2 = c(1,2,3,4,5),x3 = as.factor(c('Y','Y','N','N', 'X')))
+testmatrix <- model.matrix(~.-1, data=testdf)
+testmatrix
+```
 
 
 
