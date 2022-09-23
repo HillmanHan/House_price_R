@@ -219,6 +219,14 @@ train[,"YrSold"] <- as.factor(train[,"YrSold"])
 train[,"MoSold"] <- as.factor(train[,"MoSold"])
 #3. MSSubClass
 train[,"MSSubClass"] <- as.factor(train[,"MSSubClass"])
+
+#updating numV and facV
+numV <- which(sapply(train, is.numeric)) #saving the indices of numeric columns
+length(numV) #There are 33 variables that are numeric now
+numVnames <- names(numV)
+charV <- which(sapply(train, is.factor))
+length(charV) #There are 43 variables that are categorical now
+charVnames <- names(charV)
 ```
 
 
@@ -247,10 +255,14 @@ some analysis
 ```
 
 
-## dropping highly correlated variables (above 0.7)
+## Prepare for modeling
 ```{r}
+#dropping highly correlated variables (above 0.7)
 dropvar <- c('GarageArea', 'X1stFlrSF','TotRmsAbvGrd')
 train <- train[,!(names(train) %in% dropvar)]
+#create dataframe with dummies
+trainDM <- data.frame(model.matrix(~.-1, data = train))
+#Use trainDM for further modeling
 ```
 Future Improvement: I can make the drop process more automated by writing a function: identifying high correlations and drop the variable that has lower correlation with the SalePrice
 
