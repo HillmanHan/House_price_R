@@ -4,17 +4,42 @@ author: "Hillman Han"
 date: '2022-09-12'
 output: html_document
 ---
+
+Loading packages and data
 ```{r}
 #Load data and packages
 library(readxl)
 library(ggplot2)
 library(dplyr)
 library(corrplot)
-
+library(car)
+library(class)
+library(ranger)
+library(glmnet)
 
 df <- read.csv("train.csv")
 df <- df[, 2: ncol(df)] #getting rid of id column
-      
+
+
+deviance <- function(y, pred, family=c("gaussian","binomial")){
+  family <- match.arg(family)
+  if(family=="gaussian"){
+    return( sum( (y-pred)^2 ) )
+  }else{
+    if(is.factor(y)) y <- as.numeric(y)>1
+    return( -2*sum( y*log(pred) + (1-y)*log(1-pred) ) )
+  }
+}
+
+R2 <- function(y, pred, family=c("gaussian","binomial")){
+  fam <- match.arg(family)
+  if(fam=="binomial"){
+    if(is.factor(y)){ y <- as.numeric(y)>1 }
+  }
+  dev <- deviance(y, pred, family=fam)
+  dev0 <- deviance(y, mean(y), family=fam)
+  return(1-dev/dev0)
+}      
 ```
 
 ## Explore the dataset
@@ -68,7 +93,7 @@ for (i in 1:nrow(df)){
         if(is.na(df$LotFrontage[i])){
                df$LotFrontage[i] <- as.integer(median(df$LotFrontage[df$Neighborhood == df$Neighborhood[i]], na.rm=TRUE)) 
         }
-} #replace NAs in LotFrontage with their respective median from neiborhood group
+} #replace NAs in LotFrontage with their respective median from neighborhood group
 
 #sanity check
 sum(is.na(df$LotFrontage))
@@ -81,7 +106,7 @@ Since for a house to have Masonry veneer area, it has to have a masonry veneer t
 #See which rows have either NAs in MasVnrType or MasVnrArea
 df[is.na(df$MasVnrType) | is.na(df$MasVnrArea), c('MasVnrType', 'MasVnrArea')] 
 
-df$MasVnrType[is.na(df$MasVnrType)] <- 'none'
+df$MasVnrType[is.na(df$MasVnrType)] <- 'None'
 df$MasVnrArea[is.na(df$MasVnrArea)] <- 0
 
 #Sanity Check
@@ -195,7 +220,7 @@ sum(is.na(train)) #clean
 ```{r}
 #identifying numeric and categorical variables
 numV <- which(sapply(train, is.numeric)) #saving the indices of numeric columns
-length(numV) #There are 37 variables that are numeric
+length(numV) #There are 36 variables that are numeric
 numVnames <- names(numV)
 charV <- which(sapply(train, is.character))
 length(charV) #There are 43 variables that are categorical
@@ -239,19 +264,6 @@ CorNumV_high <- names(which(apply(corNumV_sort, 1, function(x) abs(x)>0.5))) #th
 corNumV1 <- corNumV[CorNumV_high,CorNumV_high]
 corrplot.mixed(corNumV1, tl.col="black", tl.pos = "lt", number.cex = 0.7)
 
-
-#try correlations with mixed data type
-AllMatrix <- model.matrix(~.-1, data=train) #This turns all categorical variables into dummies
-corAll <- cor(AllMatrix, use = "pairwise.complete.obs")
-corAll_sort <- as.matrix(sort(corAll[,'SalePrice'], decreasing = TRUE))
-corAll_high <- names(which(apply(corAll_sort, 1, function(x) abs(x)>0.5)))
-corAll1 <- corAll[corAll_high,corAll_high]
-corrplot.mixed(corAll1, tl.col="black", tl.pos = "lt", number.cex = 0.7)
-```
-some analysis
-
-```{r}
-#more data exploration
 ```
 
 
@@ -266,13 +278,147 @@ trainDM <- data.frame(model.matrix(~.-1, data = train))
 ```
 Future Improvement: I can make the drop process more automated by writing a function: identifying high correlations and drop the variable that has lower correlation with the SalePrice
 
+## Use 10-fold cross validation to choose the best model
+```{r}
+nfold <- 10
+n <- nrow(trainDM)
+foldid <- rep(1:nfold,each=ceiling(n/nfold))[sample(1:n)]
+OOSRMSE <- data.frame(randomForest = rep(NA,nfold), lasso = rep(NA,nfold), ridge = rep(NA,nfold))
+OOSR2 <- data.frame(randomForest = rep(NA,nfold),lasso = rep(NA,nfold),ridge = rep(NA,nfold))
+```
+
+
+### Random Forest
+```{r}
+dv_RF <- which(names(trainDM) %in% "SalePrice")
+for(k in 1:nfold){
+trainrow <- which(foldid!=k)
+RF_train <- trainDM[trainrow,]
+RF_test <- trainDM[-trainrow,-dv_RF]
+
+RF_train_ans <- trainDM[trainrow,dv_RF]
+RF_test_ans <- trainDM[-trainrow,dv_RF]
+
+RFmodel <- ranger(SalePrice~.,data = RF_train, num.trees = 500, respect.unordered.factors = "order")
+
+RF_predictions <- predict(RFmodel, RF_test)$predictions
+RF_test <- cbind(RF_test, RF_test_ans)
+
+OOSR2$randomForest[k] <- R2(y = RF_test_ans, pred = as.numeric(RF_predictions), family = "gaussian")
+OOSRMSE$randomForest[k] <- sqrt(mean((RF_test_ans - as.numeric(RF_predictions))^2))
+#Progress message
+print(paste("RandomForest: Iteration",k,"of",nfold,"(thank you for your patience)"))
+}
+```
+
+### Lasso
+```{r}
+for(k in 1:nfold){
+trainrow <- which(foldid!=k)
+
+train_data_Lasso <- trainDM[trainrow,]
+test_data_Lasso <- trainDM[-trainrow,]
+
+
+# Define predictor and response variables
+y_Lasso <- train_data_Lasso$SalePrice
+Mx_Lasso <- as.matrix(train_data_Lasso[,-which(names(train_data_Lasso) == "SalePrice")])
+
+# fit lasso regression model using k-fold cross-validation
+cv_model_Lasso <- cv.glmnet(Mx_Lasso, y_Lasso, alpha = 1)
+best_lambda_Lasso <- cv_model_Lasso$lambda.min
+
+
+Mx_test_Lasso <- as.matrix(test_data_Lasso[,-which(names(train_data_Lasso) == "SalePrice")])
+lasso_predict_Lasso <- predict(cv_model_Lasso, s = best_lambda_Lasso, newx = Mx_test_Lasso)
+
+OOSR2$lasso[k] <- R2(y = test_data_Lasso$SalePrice, pred = lasso_predict_Lasso, family = "gaussian")
+OOSRMSE$lasso[k] <- sqrt(mean((test_data_Lasso$SalePrice - lasso_predict_Lasso)^2))
+
+#Progress message
+print(paste("Lasso: Iteration",k,"of",nfold,"(thank you for your patience)"))
+}
+```
+
+### Ridge
+
+```{r}
+for(k in 1:nfold){
+trainrow <- which(foldid!=k)
+
+train_data_Ridge <- trainDM[trainrow,]
+test_data_Ridge <- trainDM[-trainrow,]
+
+
+# Define predictor and response variables
+y_Ridge <- train_data_Ridge$SalePrice
+Mx_Ridge <- as.matrix(train_data_Ridge[,-which(names(train_data_Ridge) == "SalePrice")])
+
+# fit lasso regression model using k-fold cross-validation
+cv_model_Ridge <- cv.glmnet(Mx_Ridge, y_Ridge, alpha = 0)
+best_lambda_Ridge <- cv_model_Ridge$lambda.min
+
+
+Mx_test_Ridge <- as.matrix(test_data_Ridge[,-which(names(train_data_Ridge) == "SalePrice")])
+lasso_predict_Ridge <- predict(cv_model_Ridge, s = best_lambda_Ridge, newx = Mx_test_Ridge)
+
+OOSR2$ridge[k] <- R2(y = test_data_Ridge$SalePrice, pred = lasso_predict_Ridge, family = "gaussian")
+OOSRMSE$ridge[k] <- sqrt(mean((test_data_Ridge$SalePrice - lasso_predict_Ridge)^2))
+
+#Progress message
+print(paste("Ridge: Iteration",k,"of",nfold,"(thank you for your patience)"))
+}
+```
+
+### Elastic Net
+```{r}
+set.seed(39)
+dv_EN <- which(names(trainDM) %in% "SalePrice")
+ENtrain_rows <- sample(1:nrow(trainDM), 0.8*nrow(trainDM)) #80% for training, 20% for testing
+EN_train <- as.matrix(trainDM[ENtrain_rows,-dv_EN])
+EN_test <- as.matrix(trainDM[-ENtrain_rows,-dv_EN])
+
+EN_train_ans <- trainDM[ENtrain_rows,dv_EN]
+EN_test_ans <- trainDM[-ENtrain_rows,dv_EN]
+
+Alpha_list <- list() #creating an empty list
+for(i in 0:10){
+      fit.name <- paste0("alpha", i/10) #different alphas
+      Alpha_list[[fit.name]] <- cv.glmnet(EN_train, EN_train_ans, type.measure = "mse", alpha = i/10, family = "gaussian") #the model of different alphas
+      print(paste("Getting alpha", i/10, "model."))
+}
+
+
+Alpha_results <- data.frame()
+for (i in 0:10){
+      fit.name <- paste0("alpha", i/10) #as above
+      ENpredicted <- predict(Alpha_list[[fit.name]], s = Alpha_list[[fit.name]]$lambda.1se, newx = EN_test) #get the prediction
+      rmse <- sqrt(mean((EN_test_ans - ENpredicted)^2)) #calc mse
+      temp <- data.frame(alpha = i/10, rmse = rmse, fit.name = fit.name) #create a data frame with the results shown
+      Alpha_results <- rbind(Alpha_results, temp) #bind the results for each level of alpha
+      print(paste("Predicting alpha", i/10, "model."))
+}
+Alpha_results
+```
+Ridge works the best
+
+## Graphing three models
+```{r}
+barplot(t(as.matrix(OOSR2)), beside=TRUE, legend=TRUE, args.legend = list(bty = "n", x = "top", ncol = 3),  ylim = c(0,1.1), ylab= bquote( "Out of Sample R2"), xlab="Fold", names.arg = c(1:10),col=c("red","pink","#FF99FF"), title = "AA", main = "OOS R2 for each fold")
+
+barplot(t(as.matrix(OOSRMSE)), beside=TRUE, legend=TRUE, args.legend = list(bty = "n", x = "top", ncol = 3), ylim = c(0,100000), ylab= bquote( "Out of Sample RMSE"), xlab="Fold", names.arg = c(1:10),col=c("red","pink","#FF99FF"), main = "OOS RMSE for each fold")
+```
+
+
+
 
 ### test station
 ```{r}
 #use of model.matrix to create dummies
-testdf <- data.frame(x1 = as.factor(c("a","a","b","c","d")), x2 = c(1,2,3,4,5),x3 = as.factor(c('Y','Y','N','N', 'X')))
+testdf <- data.frame(x1 = as.factor(c("a","a","b","c","d")), x2 = c(1,2,3,4,5),x3 = as.factor(c('Y','Y','N','N', 'X')), x4 = as.factor(c("Hillman", "Tony", "Katie", "Katie", "Tony")))
 testmatrix <- model.matrix(~.-1, data=testdf)
-testmatrix
+testmatrix[,2:ncol(testmatrix)]
+
 ```
 
 

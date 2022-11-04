@@ -308,7 +308,7 @@ BsmtFinType1: Rating of basement finished area
        Rec	Average Rec Room
        LwQ	Low Quality
        Unf	Unfinshed
-       NA	No Basement
+       Nobase	No Basement
 		
 BsmtFinSF1: Type 1 finished square feet
 
